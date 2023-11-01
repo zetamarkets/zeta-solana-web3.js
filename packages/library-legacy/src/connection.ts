@@ -60,8 +60,8 @@ import type {TransactionSignature} from './transaction';
 import type {CompiledInstruction} from './message';
 
 const ZstdCodec = require('zstd-codec').ZstdCodec;
-let zstdStreaming;
-ZstdCodec.run(zstd => {
+let zstdStreaming: any;
+ZstdCodec.run((zstd: any) => {
   zstdStreaming = new zstd.Streaming();
 });
 
@@ -6294,8 +6294,11 @@ export class Connection {
     Object.entries(
       this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
     ).forEach(([key, value]) => {
-      if (value.serverSubscriptionId === notification.subscription) {
-        if (key.toString().match(/"encoding":"(.*?)"/)[1] == 'base64+zstd') {
+      if (
+        (value as any).serverSubscriptionId ===
+        (notification as any).subscription
+      ) {
+        if (key.toString().match(/"encoding":"(.*?)"/)![1] == 'base64+zstd') {
           isZstd = true;
           return;
         }
@@ -6304,9 +6307,9 @@ export class Connection {
 
     if (isZstd) {
       let decompressed = zstdStreaming.decompress(
-        Buffer.from(notification.result.value.data[0], 'base64'),
+        Buffer.from((notification as any).result.value.data[0], 'base64'),
       );
-      notification.result.value.data[0] = Buffer.from(decompressed);
+      (notification as any).result.value.data[0] = Buffer.from(decompressed);
     }
 
     const {result, subscription} = create(
@@ -6442,8 +6445,11 @@ export class Connection {
     Object.entries(
       this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
     ).forEach(([key, value]) => {
-      if (value.serverSubscriptionId === notification.subscription) {
-        if (key.toString().match(/"encoding":"(.*?)"/)[1] == 'base64+zstd') {
+      if (
+        (value as any).serverSubscriptionId ===
+        (notification as any).subscription
+      ) {
+        if (key.toString().match(/"encoding":"(.*?)"/)![1] == 'base64+zstd') {
           isZstd = true;
           return;
         }
