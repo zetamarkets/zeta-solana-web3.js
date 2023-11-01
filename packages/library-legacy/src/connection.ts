@@ -6287,6 +6287,10 @@ export class Connection {
    */
   _wsOnAccountNotification(notification: object) {
     let isZstd = false;
+
+    // Reverse search the existing _subscriptionsByHash map to find if it's zstd compressed or not
+    // This could be slow, but the expected case is 10-20 subscriptions so it shouldn't matter
+    // If there are performance issues, make a new map to specifically store serverSubscriptionId -> encoding
     Object.entries(
       this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
     ).forEach(([key, value]) => {
@@ -6431,6 +6435,10 @@ export class Connection {
    */
   _wsOnProgramAccountNotification(notification: Object) {
     let isZstd = false;
+
+    // Reverse search the existing _subscriptionsByHash map to find if it's zstd compressed or not
+    // This could be slow, but the expected case is 10-20 subscriptions so it shouldn't matter
+    // If there are performance issues, make a new map to specifically store serverSubscriptionId -> encoding
     Object.entries(
       this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
     ).forEach(([key, value]) => {
