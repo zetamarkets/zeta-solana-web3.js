@@ -1,6 +1,6 @@
 {
   "name": "zeta-solana-web3",
-  "version": "1.87.3-beta.0",
+  "version": "1.87.3",
   "description": "Solana Javascript API",
   "keywords": [
     "api",
