@@ -59,6 +59,12 @@ import type {FeeCalculator} from './fee-calculator';
 import type {TransactionSignature} from './transaction';
 import type {CompiledInstruction} from './message';
 
+const ZstdCodec = require('zstd-codec').ZstdCodec;
+let zstdStreaming;
+ZstdCodec.run(zstd => {
+  zstdStreaming = new zstd.Streaming();
+});
+
 const PublicKeyFromString = coerce(
   instance(PublicKey),
   string(),
@@ -66,11 +72,18 @@ const PublicKeyFromString = coerce(
 );
 
 const RawAccountDataResult = tuple([string(), literal('base64')]);
+const RawAccountDataResultZstd = tuple([any(), literal('base64+zstd')]);
 
 const BufferFromRawAccountData = coerce(
   instance(Buffer),
   RawAccountDataResult,
   value => Buffer.from(value[0], 'base64'),
+);
+
+const BufferFromRawAccountDataZstd = coerce(
+  instance(Buffer),
+  RawAccountDataResultZstd,
+  value => value[0],
 );
 
 /**
@@ -1885,6 +1898,17 @@ const AccountInfoResult = pick({
 /**
  * @internal
  */
+const AccountInfoResultZstd = pick({
+  executable: boolean(),
+  owner: PublicKeyFromString,
+  lamports: number(),
+  data: BufferFromRawAccountDataZstd,
+  rentEpoch: number(),
+});
+
+/**
+ * @internal
+ */
 const KeyedAccountInfoResult = pick({
   pubkey: PublicKeyFromString,
   account: AccountInfoResult,
@@ -1966,6 +1990,11 @@ const GetSignaturesForAddressRpcResult = jsonRpcResult(
 /***
  * Expected JSON RPC response for the "accountNotification" message
  */
+const AccountNotificationResultZstd = pick({
+  subscription: number(),
+  result: notificationResultAndContext(AccountInfoResultZstd),
+});
+
 const AccountNotificationResult = pick({
   subscription: number(),
   result: notificationResultAndContext(AccountInfoResult),
@@ -1974,6 +2003,10 @@ const AccountNotificationResult = pick({
 /**
  * @internal
  */
+const ProgramAccountInfoResultZstd = pick({
+  pubkey: PublicKeyFromString,
+  account: AccountInfoResultZstd,
+});
 const ProgramAccountInfoResult = pick({
   pubkey: PublicKeyFromString,
   account: AccountInfoResult,
@@ -1982,6 +2015,10 @@ const ProgramAccountInfoResult = pick({
 /***
  * Expected JSON RPC response for the "programNotification" message
  */
+const ProgramAccountNotificationResultZstd = pick({
+  subscription: number(),
+  result: notificationResultAndContext(ProgramAccountInfoResultZstd),
+});
 const ProgramAccountNotificationResult = pick({
   subscription: number(),
   result: notificationResultAndContext(ProgramAccountInfoResult),
@@ -5995,6 +6032,7 @@ export class Connection {
   ) {
     const prevState = this._subscriptionsByHash[hash]?.state;
     this._subscriptionsByHash[hash] = nextSubscription;
+
     if (prevState !== nextSubscription.state) {
       const stateChangeCallbacks =
         this._subscriptionStateChangeCallbacksByHash[hash];
@@ -6248,10 +6286,30 @@ export class Connection {
    * @internal
    */
   _wsOnAccountNotification(notification: object) {
+    let isZstd = false;
+    Object.entries(
+      this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
+    ).forEach(([key, value]) => {
+      if (value.serverSubscriptionId === notification.subscription) {
+        if (key.toString().match(/"encoding":"(.*?)"/)[1] == 'base64+zstd') {
+          isZstd = true;
+          return;
+        }
+      }
+    });
+
+    if (isZstd) {
+      let decompressed = zstdStreaming.decompress(
+        Buffer.from(notification.result.value.data[0], 'base64'),
+      );
+      notification.result.value.data[0] = Buffer.from(decompressed);
+    }
+
     const {result, subscription} = create(
       notification,
-      AccountNotificationResult,
+      isZstd ? AccountNotificationResultZstd : AccountNotificationResult,
     );
+
     this._handleServerNotification<AccountChangeCallback>(subscription, [
       result.value,
       result.context,
@@ -6337,11 +6395,12 @@ export class Connection {
     publicKey: PublicKey,
     callback: AccountChangeCallback,
     commitment?: Commitment,
+    encoding?: 'base64' | 'base64+zstd' | 'jsonParsed',
   ): ClientSubscriptionId {
     const args = this._buildArgs(
       [publicKey.toBase58()],
       commitment || this._commitment || 'finalized', // Apply connection/server default.
-      'base64',
+      encoding ? encoding : 'base64',
     );
     return this._makeSubscription(
       {
@@ -6371,10 +6430,25 @@ export class Connection {
    * @internal
    */
   _wsOnProgramAccountNotification(notification: Object) {
+    let isZstd = false;
+    Object.entries(
+      this._subscriptionsByHash as Record<SubscriptionConfigHash, Subscription>,
+    ).forEach(([key, value]) => {
+      if (value.serverSubscriptionId === notification.subscription) {
+        if (key.toString().match(/"encoding":"(.*?)"/)[1] == 'base64+zstd') {
+          isZstd = true;
+          return;
+        }
+      }
+    });
+
     const {result, subscription} = create(
       notification,
-      ProgramAccountNotificationResult,
+      isZstd
+        ? ProgramAccountNotificationResultZstd
+        : ProgramAccountNotificationResult,
     );
+
     this._handleServerNotification<ProgramAccountChangeCallback>(subscription, [
       {
         accountId: result.value.pubkey,
@@ -6399,13 +6473,15 @@ export class Connection {
     callback: ProgramAccountChangeCallback,
     commitment?: Commitment,
     filters?: GetProgramAccountsFilter[],
+    encoding?: 'base64' | 'base64+zstd' | 'jsonParsed',
   ): ClientSubscriptionId {
     const args = this._buildArgs(
       [programId.toBase58()],
       commitment || this._commitment || 'finalized', // Apply connection/server default.
-      'base64' /* encoding */,
+      encoding ? encoding : 'base64',
       filters ? {filters: filters} : undefined /* extra */,
     );
+
     return this._makeSubscription(
       {
         callback,
@@ -6582,7 +6658,7 @@ export class Connection {
   _buildArgs(
     args: Array<any>,
     override?: Commitment,
-    encoding?: 'jsonParsed' | 'base64',
+    encoding?: 'base64' | 'base64+zstd' | 'jsonParsed',
     extra?: any,
   ): Array<any> {
     const commitment = override || this._commitment;

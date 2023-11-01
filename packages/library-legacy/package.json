@@ -1,6 +1,6 @@
 {
-  "name": "@solana/web3.js",
-  "version": "0.0.0-development",
+  "name": "zeta-solana-web3",
+  "version": "1.87.3-beta.0",
   "description": "Solana Javascript API",
   "keywords": [
     "api",
@@ -9,13 +9,6 @@
   "license": "MIT",
   "author": "Solana Labs Maintainers <maintainers@solanalabs.com>",
   "homepage": "https://solana.com/",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/solana-labs/solana-web3.js.git"
-  },
-  "bugs": {
-    "url": "http://github.com/solana-labs/solana-web3.js.git/issues"
-  },
   "publishConfig": {
     "access": "public"
   },
@@ -68,7 +61,8 @@
     "jayson": "^4.1.0",
     "node-fetch": "^2.6.12",
     "rpc-websockets": "^7.5.1",
-    "superstruct": "^0.14.2"
+    "superstruct": "^0.14.2",
+    "zstd-codec": "0.1.4"
   },
   "devDependencies": {
     "@babel/core": "^7.23.2",
